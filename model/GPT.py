@@ -159,3 +159,35 @@ def generate_text(
 
         idx = torch.cat([idx,next_idx],dim=-1) # Appends sampled index to the running sequence
     return idx
+
+def generate(model:GPTModel,
+        idx:torch.Tensor,
+        max_new_tokens:int,
+        context_size:int,
+        temperature=0.0,
+        top_k:int=None,
+        eos_id:str=None
+        ):
+    for _ in range(max_new_tokens):
+        input_ids = idx[:-context_size]
+        with torch.no_grad():
+            logits:torch.Tensor = model(input_ids)
+        if top_k is not None:
+            top_logits,_ = torch.topk(logits,top_k)
+            min_val = top_logits[-1]
+            logits = logits.where(
+                logits >= min_val,
+                -torch.inf
+            ).to(logits.device)
+        if temperature > 0.0:
+            logits = logits / temperature
+            probas = logits.softmax(dim=-1)
+            next_index = torch.multinomial(probas,num_samples=1)
+        else:
+            next_index = logits.argmax(dim=-1,keepdim=True)
+        
+        if next_index== eos_id:
+            break
+
+        idx = torch.cat([idx,next_index],dim=-1)
+    return idx
